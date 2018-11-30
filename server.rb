@@ -20,6 +20,11 @@ class LabelSwitcherApp < Sinatra::Application
   # App identifier (an integer)
   APP_IDENTIFIER = ENV['GITHUB_APP_IDENTIFIER']
 
+  # Labels
+  REVIEW_REQUIRED_LABEL = 'review-required'.freeze
+  CHANGES_REQUESTED_LABEL = 'changes-requested'.freeze
+  WIP_LABEL = 'WIP'.freeze
+
   ########## Configure Sinatra
   #
   # Turn on verbose logging during development
@@ -32,17 +37,17 @@ class LabelSwitcherApp < Sinatra::Application
   ########## Before each request to our app
   before do
     payload = {
-        # The time that this JWT was issued, _i.e._ now.
-        iat: Time.now.to_i,
+      # The time that this JWT was issued, _i.e._ now.
+      iat: Time.now.to_i,
 
-        # How long is the JWT good for (in seconds)?
-        # Let's say it can be used for 10 minutes before it needs to be refreshed.
-        # TODO we don't actually cache this token, we regenerate a new one every time!
-        exp: Time.now.to_i + (10 * 60),
+      # How long is the JWT good for (in seconds)?
+      # Let's say it can be used for 10 minutes before it needs to be refreshed.
+      # TODO we don't actually cache this token, we regenerate a new one every time!
+      exp: Time.now.to_i + (10 * 60),
 
-        # GitHub App's identifier number, so GitHub knows who issued the JWT, and know what permissions
-        # this token has.
-        iss: APP_IDENTIFIER
+      # GitHub App's identifier number, so GitHub knows who issued the JWT, and know what permissions
+      # this token has.
+      iss: APP_IDENTIFIER
     }
 
     jwt = JWT.encode(payload, PRIVATE_KEY, 'RS256')
@@ -121,8 +126,8 @@ class LabelSwitcherApp < Sinatra::Application
       # logger.debug payload
       repo = payload['repository']['full_name']
       pr_number = payload['pull_request']['number']
-      labels = ['status/review-required']
-      labels << 'status/WIP' if (payload['pull_request']['title'].include?('[WIP]'))
+      labels = [REVIEW_REQUIRED_LABEL]
+      labels << WIP_LABEL if (payload['pull_request']['title'].include?('[WIP]'))
       @bot_client.add_labels_to_an_issue(repo, pr_number, labels)
     end
 
@@ -134,9 +139,9 @@ class LabelSwitcherApp < Sinatra::Application
       pr_number = payload['pull_request']['number']
       current_labels = @bot_client.labels_for_issue(repo, pr_number).map(&:name)
       if payload['pull_request']['title'].include?('[WIP]')
-        @bot_client.add_labels_to_an_issue(repo, pr_number, ['status/WIP']) unless current_labels.include?('status/WIP')
-      elsif current_labels.include?('status/WIP')
-        @bot_client.remove_label(repo, pr_number, 'status/WIP')
+        @bot_client.add_labels_to_an_issue(repo, pr_number, [WIP_LABEL]) unless current_labels.include?(WIP_LABEL)
+      elsif current_labels.include?(WIP_LABEL)
+        @bot_client.remove_label(repo, pr_number, WIP_LABEL)
       end
     end
 
@@ -145,7 +150,7 @@ class LabelSwitcherApp < Sinatra::Application
       # logger.debug payload
       repo = payload['repository']['full_name']
       pr_number = payload['pull_request']['number']
-      @bot_client.add_labels_to_an_issue(repo, pr_number, ['status/WIP']) if (payload['pull_request']['title'].include?('[WIP]'))
+      @bot_client.add_labels_to_an_issue(repo, pr_number, [WIP_LABEL]) if payload['pull_request']['title'].include?('[WIP]')
     end
 
     # Adds the changes-requested label (and removed review-required) if the reviewer asked for changes
@@ -156,8 +161,8 @@ class LabelSwitcherApp < Sinatra::Application
       current_labels = @bot_client.labels_for_issue(repo, pr_number).map(&:name)
       return unless payload['review']['state'] == 'changes_requested'
 
-      @bot_client.add_labels_to_an_issue(repo, pr_number, ['status/changes-requested'])
-      @bot_client.remove_label(repo, pr_number, 'status/review-required') if current_labels.include?('status/review-required')
+      @bot_client.add_labels_to_an_issue(repo, pr_number, [CHANGES_REQUESTED_LABEL])
+      @bot_client.remove_label(repo, pr_number, REVIEW_REQUIRED_LABEL) if current_labels.include?(REVIEW_REQUIRED_LABEL)
     end
 
     # Adds [WIP] to the PR title if the user added the WIP label and forgot to write [WIP]
@@ -165,7 +170,7 @@ class LabelSwitcherApp < Sinatra::Application
       # logger.debug payload
       repo = payload['repository']['full_name']
       pr_number = payload['pull_request']['number']
-      if (payload['label']['name'] == 'status/WIP' && !payload['pull_request']['title'].include?('[WIP]'))
+      if payload['label']['name'] == WIP_LABEL && !payload['pull_request']['title'].include?('[WIP]')
         @bot_client.update_pull_request(repo, pr_number, title: "[WIP] #{payload['pull_request']['title']}")
       end
     end
@@ -175,7 +180,7 @@ class LabelSwitcherApp < Sinatra::Application
       # logger.debug payload
       repo = payload['repository']['full_name']
       pr_number = payload['pull_request']['number']
-      if (payload['label']['name'] == 'status/WIP' && payload['pull_request']['title'].include?('[WIP]'))
+      if payload['label']['name'] == WIP_LABEL && payload['pull_request']['title'].include?('[WIP]')
         @bot_client.update_pull_request(repo, pr_number, title: payload['pull_request']['title'].gsub('[WIP] ', ''))
       end
     end
