@@ -140,6 +140,7 @@ class LabelSwitcherApp < Sinatra::Application
       current_labels = @bot_client.labels_for_issue(repo, pr_number).map(&:name)
       if payload['pull_request']['title'].include?('[WIP]')
         @bot_client.add_labels_to_an_issue(repo, pr_number, [WIP_LABEL]) unless current_labels.include?(WIP_LABEL)
+        @bot_client.remove_label(repo, pr_number, REVIEW_REQUIRED_LABEL) if current_labels.include?(REVIEW_REQUIRED_LABEL)
       elsif current_labels.include?(WIP_LABEL)
         @bot_client.remove_label(repo, pr_number, WIP_LABEL)
       end
