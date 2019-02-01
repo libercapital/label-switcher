@@ -21,6 +21,7 @@ class LabelSwitcherApp < Sinatra::Application
   APP_IDENTIFIER = ENV['GITHUB_APP_IDENTIFIER']
 
   # Labels
+  APPROVED_LABEL = 'approved'.freeze
   REVIEW_REQUIRED_LABEL = 'review-required'.freeze
   CHANGES_REQUESTED_LABEL = 'changes-requested'.freeze
   WIP_LABEL = 'WIP'.freeze
@@ -154,18 +155,6 @@ class LabelSwitcherApp < Sinatra::Application
       @bot_client.add_labels_to_an_issue(repo, pr_number, [WIP_LABEL]) if payload['pull_request']['title'].include?('[WIP]')
     end
 
-    # Adds the changes-requested label (and removed review-required) if the reviewer asked for changes
-    def handle_pull_request_review_submitted_event(payload)
-      # logger.debug payload
-      repo = payload['repository']['full_name']
-      pr_number = payload['pull_request']['number']
-      current_labels = @bot_client.labels_for_issue(repo, pr_number).map(&:name)
-      return unless payload['review']['state'] == 'changes_requested'
-
-      @bot_client.add_labels_to_an_issue(repo, pr_number, [CHANGES_REQUESTED_LABEL])
-      @bot_client.remove_label(repo, pr_number, REVIEW_REQUIRED_LABEL) if current_labels.include?(REVIEW_REQUIRED_LABEL)
-    end
-
     # Adds [WIP] to the PR title if the user added the WIP label and forgot to write [WIP]
     def handle_pull_request_labeled_event(payload)
       # logger.debug payload
@@ -183,6 +172,24 @@ class LabelSwitcherApp < Sinatra::Application
       pr_number = payload['pull_request']['number']
       if payload['label']['name'] == WIP_LABEL && payload['pull_request']['title'].include?('[WIP]')
         @bot_client.update_pull_request(repo, pr_number, title: payload['pull_request']['title'].gsub('[WIP] ', ''))
+      end
+    end
+
+    def handle_pull_request_review_submitted_event(payload)
+      repo = payload['repository']['full_name']
+      pr_number = payload['pull_request']['number']
+      current_labels = @bot_client.labels_for_issue(repo, pr_number).map(&:name)
+
+      case payload['review']['state']
+      # Adds the changes-requested label (and removed review-required) if the reviewer asked for changes
+      when 'changes_requested'
+        @bot_client.add_labels_to_an_issue(repo, pr_number, [CHANGES_REQUESTED_LABEL])
+        @bot_client.remove_label(repo, pr_number, REVIEW_REQUIRED_LABEL) if current_labels.include?(REVIEW_REQUIRED_LABEL)
+      # Adds the approved label (and removed review-required and changes-requested) if someone approved the PR
+      when 'approved'
+        @bot_client.remove_label(repo, pr_number, REVIEW_REQUIRED_LABEL) if current_labels.include?(REVIEW_REQUIRED_LABEL)
+        @bot_client.remove_label(repo, pr_number, CHANGES_REQUESTED_LABEL) if current_labels.include?(CHANGES_REQUESTED_LABEL)
+        @bot_client.add_labels_to_an_issue(repo, pr_number, [APPROVED_LABEL]) unless current_labels.include?(APPROVED_LABEL)
       end
     end
   end
