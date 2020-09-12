@@ -1,6 +1,6 @@
 source 'http://rubygems.org'
 
-ruby '2.4.4'
+ruby '2.7.0'
 
 gem 'sinatra', '~> 2.0.4'
 gem 'jwt', '~> 2.1'
